@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a472a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Calculate optimal poker chip distributions for your home games">
+  <title>Poker Chip Calculator</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>🎰 Chip Calculator</h1>
+    </header>
+
+    <main class="main">
+      <!-- Game Setup Section -->
+      <section class="card" id="game-setup">
+        <h2 class="card-title">Game Setup</h2>
+        <p class="card-hint" id="suggested-buyin">💡 Suggested buy-in: 100× Big Blind</p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="buy-in">Buy-in</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="buy-in" value="50" min="1" step="5">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="players">Players</label>
+            <input type="number" id="players" value="6" min="2" max="12">
+          </div>
+          <div class="form-group">
+            <label for="small-blind">Small Blind</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="small-blind" value="0.50" min="0.01" step="0.25">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="big-blind">Big Blind</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="big-blind" value="1" min="0.01" step="0.25">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Chip Inventory Section -->
+      <section class="card" id="chip-inventory">
+        <div class="card-header">
+          <h2 class="card-title">Chip Inventory</h2>
+          <button class="btn-icon" id="add-chip-btn" title="Add chip type">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div id="chip-list" class="chip-list">
+          <!-- Chip items will be rendered here -->
+        </div>
+        <button class="btn-secondary" id="suggest-values-btn">✨ Suggest Optimal Values</button>
+      </section>
+
+      <!-- Calculate Button -->
+      <button class="btn-primary" id="calculate-btn">Calculate Distribution</button>
+
+      <!-- Results Section -->
+      <section class="card results-card hidden" id="results">
+        <h2 class="card-title">Per Player Distribution</h2>
+        <div id="distribution-list" class="distribution-list">
+          <!-- Distribution items will be rendered here -->
+        </div>
+        <div class="results-total" id="results-total">
+          <!-- Total will be shown here -->
+        </div>
+        <div id="results-warnings" class="results-warnings"></div>
+      </section>
+
+      <!-- Presets Section -->
+      <section class="card" id="presets-section">
+        <div class="card-header">
+          <h2 class="card-title">Saved Presets</h2>
+        </div>
+        <div id="preset-list" class="preset-list">
+          <!-- Presets will be rendered here -->
+        </div>
+        <div class="preset-actions">
+          <input type="text" id="preset-name" placeholder="Preset name...">
+          <button class="btn-secondary" id="save-preset-btn">Save Current</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add Chip Modal -->
+  <div class="modal-overlay hidden" id="add-chip-modal">
+    <div class="modal">
+      <h3 class="modal-title" id="chip-modal-title">Add Chip Type</h3>
+      <div class="form-group">
+        <label for="new-chip-color">Color</label>
+        <select id="new-chip-color">
+          <option value="#FFFFFF" data-name="White">⚪ White</option>
+          <option value="#E53935" data-name="Red">🔴 Red</option>
+          <option value="#1E88E5" data-name="Blue">🔵 Blue</option>
+          <option value="#43A047" data-name="Green">🟢 Green</option>
+          <option value="#212121" data-name="Black">⚫ Black</option>
+          <option value="#8E24AA" data-name="Purple">🟣 Purple</option>
+          <option value="#FB8C00" data-name="Orange">🟠 Orange</option>
+          <option value="#FDD835" data-name="Yellow">🟡 Yellow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="new-chip-quantity">Quantity Owned</label>
+        <input type="number" id="new-chip-quantity" value="100" min="1">
+      </div>
+      <div class="form-group">
+        <label for="new-chip-value">Value (optional)</label>
+        <div class="input-wrapper">
+          <span class="input-prefix">$</span>
+          <input type="number" id="new-chip-value" placeholder="Auto" min="0.01" step="0.25">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancel-add-chip">Cancel</button>
+        <button class="btn-primary" id="confirm-add-chip">Add Chip</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

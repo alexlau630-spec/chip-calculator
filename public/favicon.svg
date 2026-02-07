@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="chipGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c41e3a"/>
+      <stop offset="100%" style="stop-color:#8b0000"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer ring -->
+  <circle cx="50" cy="50" r="48" fill="url(#chipGradient)" stroke="#ffd700" stroke-width="2"/>
+  <!-- Decorative stripes -->
+  <g fill="#fff" opacity="0.3">
+    <rect x="48" y="5" width="4" height="15" rx="2"/>
+    <rect x="48" y="80" width="4" height="15" rx="2"/>
+    <rect x="5" y="48" width="15" height="4" rx="2"/>
+    <rect x="80" y="48" width="15" height="4" rx="2"/>
+    <rect x="15" y="15" width="4" height="12" rx="2" transform="rotate(45 17 21)"/>
+    <rect x="81" y="15" width="4" height="12" rx="2" transform="rotate(-45 83 21)"/>
+    <rect x="15" y="73" width="4" height="12" rx="2" transform="rotate(-45 17 79)"/>
+    <rect x="81" y="73" width="4" height="12" rx="2" transform="rotate(45 83 79)"/>
+  </g>
+  <!-- Inner circle -->
+  <circle cx="50" cy="50" r="30" fill="#1a472a" stroke="#ffd700" stroke-width="1.5"/>
+  <!-- Chip text -->
+  <text x="50" y="45" text-anchor="middle" fill="#ffd700" font-family="Arial Black, sans-serif" font-size="14" font-weight="bold">CHIP</text>
+  <text x="50" y="62" text-anchor="middle" fill="#ffd700" font-family="Arial Black, sans-serif" font-size="12" font-weight="bold">CALC</text>
+</svg>
