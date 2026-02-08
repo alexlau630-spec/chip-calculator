@@ -4,49 +4,75 @@
  */
 
 /**
- * Suggest optimal chip values based on blind structure.
+ * Suggest optimal chip values based on buy-in AND blind structure.
  * 
- * RULE:
- * - If BB >= $1 (integer blinds): Use clean base-10 denominations (1, 5, 10, 25, 100, 500)
- *   These are easy to remember AND can add up to any blind/buy-in value.
- * - If BB < $1 (fractional blinds): First 2 chips = SB and BB exactly,
- *   then clean integers for the rest.
+ * PRIORITIES:
+ * 1. Values should allow hitting the exact buy-in
+ * 2. Values should be easy to remember (clean integers)
+ * 3. Smallest chip should be able to pay the small blind
+ * 4. Largest chip should be reasonable (≤ buy-in / 2)
  * 
  * @param {number} smallBlind - The small blind amount
+ * @param {number} buyIn - The buy-in amount
  * @param {number} numChipTypes - Number of different chip types available
  * @returns {number[]} - Array of suggested chip values
  */
-export function suggestChipValues(smallBlind, numChipTypes) {
+export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
     const values = [];
     const bigBlind = smallBlind * 2;
     const isFractionalBlind = bigBlind < 1;
 
+    // Denomination pool (from smallest to largest)
+    const allDenominations = [0.25, 0.50, 1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+
     if (isFractionalBlind) {
-        // Fractional blinds (e.g., $0.25/$0.50): 
-        // First 2 chips MUST be SB and BB exactly (can't easily make $0.25 from other chips)
+        // Fractional blinds: First 2 chips MUST be SB and BB exactly
         values.push(smallBlind);
         if (numChipTypes >= 2) {
             values.push(bigBlind);
         }
 
-        // Remaining chips: use clean integer values starting from $1
-        const integerValues = [1, 5, 25, 100, 500, 1000];
-        for (let i = 2; i < numChipTypes && (i - 2) < integerValues.length; i++) {
-            values.push(integerValues[i - 2]);
+        // Remaining chips: pick from pool, starting above BB, up to buy-in/2
+        const maxValue = Math.max(buyIn / 2, 1);
+        const remaining = allDenominations.filter(d => d >= 1 && d <= maxValue);
+
+        for (let i = 2; i < numChipTypes && (i - 2) < remaining.length; i++) {
+            values.push(remaining[i - 2]);
         }
     } else {
-        // Integer blinds (e.g., $5/$10):
-        // Use clean base-10 denominations that are easy to remember
-        // These can ADD UP to any blind value (e.g., $5 = 5×$1 or 1×$5)
-        const cleanDenominations = [1, 5, 10, 25, 100, 500, 1000, 5000];
+        // Integer blinds: Pick from pool based on buy-in range
+        // Smallest should be ≤ small blind (or 1 if SB > 1)
+        // Largest should be ≤ buy-in / 2
 
-        for (let i = 0; i < Math.min(numChipTypes, cleanDenominations.length); i++) {
-            values.push(cleanDenominations[i]);
+        const minValue = Math.min(smallBlind, 1); // At least $1 or smaller
+        const maxValue = Math.max(buyIn / 2, smallBlind * 2);
+
+        // Filter denominations to valid range
+        let validDenoms = allDenominations.filter(d => d >= minValue && d <= maxValue && d % 1 === 0);
+
+        // Ensure we have at least SB and BB representable
+        if (validDenoms.length === 0) {
+            validDenoms = [1, 5, 10, 25, 100]; // fallback
+        }
+
+        // Pick evenly spaced denominations to use all colors
+        if (validDenoms.length <= numChipTypes) {
+            // Use all valid denominations
+            values.push(...validDenoms);
+        } else {
+            // Pick evenly spaced values
+            const step = (validDenoms.length - 1) / (numChipTypes - 1);
+            for (let i = 0; i < numChipTypes; i++) {
+                const idx = Math.round(i * step);
+                values.push(validDenoms[idx]);
+            }
         }
     }
 
-    return values;
+    // Ensure values are sorted and unique
+    return [...new Set(values)].sort((a, b) => a - b);
 }
+
 
 
 /**
@@ -136,63 +162,81 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             distribution.push({ ...large, quantity: largeQty, subtotal: largeQty * large.value });
         }
     } else {
-        // Three or more chip types: USE ALL COLORS and FILL BUY-IN
+        // Three or more chip types: 40/40/20 DISTRIBUTION
         // 
-        // Strategy (smallest-to-largest allocation, largest-down fill):
-        // 1. Allocate smallest chips first (10 min for blind payments)
-        // 2. Allocate 2 of each middle chip (for color variety)
-        // 3. Fill remaining value from LARGEST down (efficiently hit buy-in)
-        // 4. Fine-tune with smallest chips
+        // Target: 40% value in small chips, 40% in mid, 20% in large
+        // Then ensure all colors are represented
 
         const allocations = new Map();
         sortedChips.forEach(chip => allocations.set(chip.id, 0));
 
+        // Categorize chips into small, mid, large tiers
+        const n = sortedChips.length;
+        const smallChips = sortedChips.slice(0, Math.ceil(n * 0.4)); // ~40% of chip types
+        const midChips = sortedChips.slice(Math.ceil(n * 0.4), Math.ceil(n * 0.8)); // next ~40%
+        const largeChips = sortedChips.slice(Math.ceil(n * 0.8)); // top ~20%
+
+        // Target values for each tier
+        const smallTarget = buyIn * 0.40;  // 40% of buy-in
+        const midTarget = buyIn * 0.40;    // 40% of buy-in
+        const largeTarget = buyIn * 0.20;  // 20% of buy-in
+
+        // Helper: allocate value to a tier of chips (largest first within tier)
+        const allocateToTier = (chips, targetValue) => {
+            let remaining = targetValue;
+            // Allocate from largest in tier first for efficiency
+            for (let i = chips.length - 1; i >= 0 && remaining > 0; i--) {
+                const chip = chips[i];
+                const maxQty = Math.floor(chip.quantity / numPlayers);
+                const currentQty = allocations.get(chip.id);
+                const available = maxQty - currentQty;
+                const canFit = Math.floor(remaining / chip.value);
+                const qty = Math.min(available, canFit);
+                if (qty > 0) {
+                    allocations.set(chip.id, currentQty + qty);
+                    remaining -= qty * chip.value;
+                }
+            }
+            return remaining; // Return unallocated amount
+        };
+
+        // Allocate to each tier
+        let leftover = 0;
+        leftover += allocateToTier(largeChips, largeTarget);
+        leftover += allocateToTier(midChips, midTarget);
+        leftover += allocateToTier(smallChips, smallTarget + leftover);
+
+        // Ensure every color has at least 2 chips (swap from smallest if needed)
         const smallest = sortedChips[0];
-        const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
-
-        // STEP 1: Allocate smallest chips for blind payments (10 minimum)
-        const smallestInitial = Math.min(10, smallestMaxQty, Math.floor(remainingValue / smallest.value));
-        allocations.set(smallest.id, smallestInitial);
-        remainingValue -= smallestInitial * smallest.value;
-
-        // STEP 2: Allocate 2 of each MIDDLE chip (not smallest, not largest)
-        // This ensures color variety while leaving room for largest to fill value
-        for (let i = 1; i < sortedChips.length - 1 && remainingValue > 0; i++) {
+        for (let i = 1; i < sortedChips.length; i++) {
             const chip = sortedChips[i];
-            const maxQty = Math.floor(chip.quantity / numPlayers);
-            const allocQty = Math.min(2, maxQty, Math.floor(remainingValue / chip.value));
-            if (allocQty > 0) {
-                allocations.set(chip.id, allocQty);
-                remainingValue -= allocQty * chip.value;
+            if (allocations.get(chip.id) === 0) {
+                const maxQty = Math.floor(chip.quantity / numPlayers);
+                const qty = Math.min(2, maxQty);
+                if (qty > 0) {
+                    allocations.set(chip.id, qty);
+                    // Compensate by reducing smallest if possible
+                    const smallestQty = allocations.get(smallest.id);
+                    const toRemove = Math.ceil((qty * chip.value) / smallest.value);
+                    if (smallestQty > toRemove) {
+                        allocations.set(smallest.id, smallestQty - toRemove);
+                    }
+                }
             }
         }
 
-        // STEP 3: Fill remaining value from LARGEST down
-        // This efficiently fills up to the buy-in target
-        for (let i = sortedChips.length - 1; i >= 0 && remainingValue > 0; i--) {
-            const chip = sortedChips[i];
-            const currentQty = allocations.get(chip.id);
-            const maxQty = Math.floor(chip.quantity / numPlayers);
-            const availableQty = maxQty - currentQty;
-            const canFit = Math.floor(remainingValue / chip.value);
-
-            const addQty = Math.min(availableQty, canFit);
-            if (addQty > 0) {
-                allocations.set(chip.id, currentQty + addQty);
-                remainingValue -= addQty * chip.value;
-            }
-        }
-
-        // STEP 4: Fine-tune with smallest chips to hit exact amount
-        if (remainingValue > 0) {
+        // Final pass: top off with smallest to hit exact buy-in
+        const currentTotal = sortedChips.reduce((sum, c) => sum + allocations.get(c.id) * c.value, 0);
+        if (currentTotal < buyIn) {
+            const gap = buyIn - currentTotal;
+            const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
             const currentSmallest = allocations.get(smallest.id);
             const additionalQty = Math.min(
-                Math.ceil(remainingValue / smallest.value),
+                Math.ceil(gap / smallest.value),
                 smallestMaxQty - currentSmallest
             );
             if (additionalQty > 0) {
                 allocations.set(smallest.id, currentSmallest + additionalQty);
-                remainingValue -= additionalQty * smallest.value;
             }
         }
 

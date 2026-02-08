@@ -260,7 +260,8 @@ function handleSaveChip() {
 // ===== Suggest Values =====
 function handleSuggestValues() {
     const smallBlind = parseFloat(elements.smallBlind.value) || 0.50;
-    const suggestedValues = suggestChipValues(smallBlind, chips.length);
+    const buyIn = parseFloat(elements.buyIn.value) || 50;
+    const suggestedValues = suggestChipValues(smallBlind, buyIn, chips.length);
 
     // Apply suggested values to chips (sorted by current value)
     const sortedChips = [...chips].sort((a, b) => a.value - b.value);
