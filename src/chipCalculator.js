@@ -20,7 +20,9 @@
 export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
     const values = [];
     const bigBlind = smallBlind * 2;
-    const isFractionalBlind = bigBlind < 1;
+
+    // Fractional if EITHER blind is less than $1 (needs exact chip representation)
+    const isFractionalBlind = smallBlind < 1 || bigBlind < 1;
 
     // Denomination pool (from smallest to largest)
     const allDenominations = [0.25, 0.50, 1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -162,77 +164,61 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             distribution.push({ ...large, quantity: largeQty, subtotal: largeQty * large.value });
         }
     } else {
-        // Three or more chip types: 40/40/20 DISTRIBUTION
+        // Three or more chip types: GREEDY FILL
         // 
-        // Target: 40% value in small chips, 40% in mid, 20% in large
-        // Then ensure all colors are represented
+        // Priority 1: Hit the exact buy-in value
+        // Priority 2: Use all colors (minimum 2 per color)
+        // 
+        // Strategy:
+        // 1. Reserve minimum 2 chips per color (ensures variety)
+        // 2. Fill remaining value from largest to smallest
+        // 3. Top off with smallest to hit exact buy-in
 
         const allocations = new Map();
         sortedChips.forEach(chip => allocations.set(chip.id, 0));
 
-        // Categorize chips into small, mid, large tiers
-        const n = sortedChips.length;
-        const smallChips = sortedChips.slice(0, Math.ceil(n * 0.4)); // ~40% of chip types
-        const midChips = sortedChips.slice(Math.ceil(n * 0.4), Math.ceil(n * 0.8)); // next ~40%
-        const largeChips = sortedChips.slice(Math.ceil(n * 0.8)); // top ~20%
-
-        // Target values for each tier
-        const smallTarget = buyIn * 0.40;  // 40% of buy-in
-        const midTarget = buyIn * 0.40;    // 40% of buy-in
-        const largeTarget = buyIn * 0.20;  // 20% of buy-in
-
-        // Helper: allocate value to a tier of chips (largest first within tier)
-        const allocateToTier = (chips, targetValue) => {
-            let remaining = targetValue;
-            // Allocate from largest in tier first for efficiency
-            for (let i = chips.length - 1; i >= 0 && remaining > 0; i--) {
-                const chip = chips[i];
-                const maxQty = Math.floor(chip.quantity / numPlayers);
-                const currentQty = allocations.get(chip.id);
-                const available = maxQty - currentQty;
-                const canFit = Math.floor(remaining / chip.value);
-                const qty = Math.min(available, canFit);
-                if (qty > 0) {
-                    allocations.set(chip.id, currentQty + qty);
-                    remaining -= qty * chip.value;
-                }
-            }
-            return remaining; // Return unallocated amount
-        };
-
-        // Allocate to each tier
-        let leftover = 0;
-        leftover += allocateToTier(largeChips, largeTarget);
-        leftover += allocateToTier(midChips, midTarget);
-        leftover += allocateToTier(smallChips, smallTarget + leftover);
-
-        // Ensure every color has at least 2 chips (swap from smallest if needed)
         const smallest = sortedChips[0];
+        const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
+
+        // STEP 1: Reserve minimum 2 chips per color (smallest gets more for blinds)
+        let reservedValue = 0;
+
+        // Smallest: reserve 8 for blind payments
+        const smallestReserve = Math.min(8, smallestMaxQty);
+        allocations.set(smallest.id, smallestReserve);
+        reservedValue += smallestReserve * smallest.value;
+
+        // Others: reserve 2 each
         for (let i = 1; i < sortedChips.length; i++) {
             const chip = sortedChips[i];
-            if (allocations.get(chip.id) === 0) {
-                const maxQty = Math.floor(chip.quantity / numPlayers);
-                const qty = Math.min(2, maxQty);
-                if (qty > 0) {
-                    allocations.set(chip.id, qty);
-                    // Compensate by reducing smallest if possible
-                    const smallestQty = allocations.get(smallest.id);
-                    const toRemove = Math.ceil((qty * chip.value) / smallest.value);
-                    if (smallestQty > toRemove) {
-                        allocations.set(smallest.id, smallestQty - toRemove);
-                    }
-                }
+            const maxQty = Math.floor(chip.quantity / numPlayers);
+            const reserveQty = Math.min(2, maxQty);
+            allocations.set(chip.id, reserveQty);
+            reservedValue += reserveQty * chip.value;
+        }
+
+        // STEP 2: Fill remaining from LARGEST down
+        let remaining = buyIn - reservedValue;
+
+        for (let i = sortedChips.length - 1; i >= 0 && remaining > 0; i--) {
+            const chip = sortedChips[i];
+            const currentQty = allocations.get(chip.id);
+            const maxQty = Math.floor(chip.quantity / numPlayers);
+            const available = maxQty - currentQty;
+            const canFit = Math.floor(remaining / chip.value);
+
+            const addQty = Math.min(available, canFit);
+            if (addQty > 0) {
+                allocations.set(chip.id, currentQty + addQty);
+                remaining -= addQty * chip.value;
             }
         }
 
-        // Final pass: top off with smallest to hit exact buy-in
-        const currentTotal = sortedChips.reduce((sum, c) => sum + allocations.get(c.id) * c.value, 0);
-        if (currentTotal < buyIn) {
-            const gap = buyIn - currentTotal;
-            const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
+        // STEP 3: Top off with smallest to hit exact buy-in
+        if (remaining > 0) {
             const currentSmallest = allocations.get(smallest.id);
             const additionalQty = Math.min(
-                Math.ceil(gap / smallest.value),
+                Math.ceil(remaining / smallest.value),
                 smallestMaxQty - currentSmallest
             );
             if (additionalQty > 0) {
