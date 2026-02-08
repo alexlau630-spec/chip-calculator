@@ -5,50 +5,60 @@
 
 /**
  * Suggest optimal blinds based on buy-in amount.
- * Uses the "100 Big Blind" standard and only suggests clean values.
+ * Uses the "100 Big Blind" standard with 1-2.5-5 series for clean values.
  * 
  * @param {number} buyIn - The buy-in amount
  * @returns {{smallBlind: number, bigBlind: number}} - Suggested blind values
  */
 export function suggestBlinds(buyIn) {
-    // Standard clean blind levels (SB, BB pairs)
-    const blindLevels = [
-        [0.05, 0.10],
-        [0.10, 0.20],
-        [0.25, 0.50],
-        [0.50, 1],
-        [1, 2],
-        [2.5, 5],
-        [5, 10],
-        [10, 20],
-        [25, 50],
-        [50, 100],
-        [100, 200],
-        [250, 500],
-        [500, 1000]
-    ];
+    // Target: 100 big blinds
+    const targetSB = buyIn / 200; // SB = buy-in / 200 (since BB = 2 * SB)
 
-    // Target: 100 big blinds (acceptable range: 50-200 BB)
-    const targetBB = buyIn / 100;
+    // Generate clean values using 1-2.5-5 series scaled by powers of 10
+    const basePattern = [1, 2.5, 5];
 
-    // Find the closest clean blind level
-    let bestLevel = blindLevels[0];
+    // Find order of magnitude
+    const magnitude = Math.floor(Math.log10(Math.max(targetSB, 0.01)));
+
+    // Generate candidates across nearby magnitudes
+    const candidates = [];
+    for (let m = magnitude - 1; m <= magnitude + 1; m++) {
+        const scale = Math.pow(10, m);
+        for (const base of basePattern) {
+            const value = base * scale;
+            // Only include values that make sense (min $0.05)
+            if (value >= 0.05) {
+                candidates.push(value);
+            }
+        }
+    }
+
+    // Find closest to target that gives 50-200 BBs
+    let bestSB = candidates[0] || 0.25;
     let bestDiff = Infinity;
 
-    for (const [sb, bb] of blindLevels) {
-        const diff = Math.abs(bb - targetBB);
+    for (const sb of candidates) {
+        const bb = sb * 2;
         const bbCount = buyIn / bb;
+        const diff = Math.abs(sb - targetSB);
 
         // Prefer levels that give 50-200 BBs
         if (bbCount >= 40 && bbCount <= 250 && diff < bestDiff) {
-            bestLevel = [sb, bb];
+            bestSB = sb;
             bestDiff = diff;
         }
     }
 
+    // Fallback: if no good match, just use closest
+    if (bestDiff === Infinity) {
+        bestSB = candidates.reduce((best, curr) =>
+            Math.abs(curr - targetSB) < Math.abs(best - targetSB) ? curr : best
+            , candidates[0] || 0.25);
+    }
+
     return {
-        smallBlind: bestLevel[0],
-        bigBlind: bestLevel[1]
+        smallBlind: bestSB,
+        bigBlind: bestSB * 2
     };
 }
 
@@ -431,8 +441,13 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
  * @returns {string} - Formatted currency string
  */
 export function formatCurrency(value) {
+    // Format with commas for thousands
     if (value >= 1) {
-        return `$${value.toFixed(value % 1 === 0 ? 0 : 2)}`;
+        const formatted = value.toLocaleString('en-US', {
+            minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+            maximumFractionDigits: 2
+        });
+        return `$${formatted}`;
     } else {
         return `$${value.toFixed(2)}`;
     }
