@@ -27,7 +27,7 @@
       <!-- Game Setup Section -->
       <section class="card" id="game-setup">
         <h2 class="card-title">Game Setup</h2>
-        <p class="card-hint" id="suggested-buyin">💡 Suggested buy-in: 100× Big Blind</p>
+
         <div class="form-grid">
           <div class="form-group">
             <label for="buy-in">Buy-in</label>
@@ -44,16 +44,24 @@
             <label for="small-blind">Small Blind</label>
             <div class="input-wrapper">
               <span class="input-prefix">$</span>
-              <input type="number" id="small-blind" value="0.50" min="0.01" step="0.25">
+              <input type="number" id="small-blind" value="0.50" min="0.01" step="0.25" disabled>
             </div>
           </div>
           <div class="form-group">
             <label for="big-blind">Big Blind</label>
             <div class="input-wrapper">
               <span class="input-prefix">$</span>
-              <input type="number" id="big-blind" value="1" min="0.01" step="0.25">
+              <input type="number" id="big-blind" value="1" min="0.01" step="0.25" disabled>
             </div>
           </div>
+        </div>
+
+        <!-- Blinds status row -->
+        <div class="blinds-status" id="blinds-status">
+          <span class="blinds-updated hidden" id="blinds-updated">✓ Blinds updated</span>
+          <button class="btn-link" id="customize-blinds-btn" type="button">
+            ⚙️ Customize Blinds
+          </button>
         </div>
       </section>
 

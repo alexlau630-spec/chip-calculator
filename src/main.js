@@ -9,6 +9,7 @@ import {
 let chips = [];
 let gameSettings = getDefaultGameSettings();
 let editingChipId = null; // null = add mode, string = edit mode
+let blindsAutoMode = true; // true = blinds are auto-calculated from buy-in
 
 // ===== DOM Elements =====
 const elements = {
@@ -17,7 +18,8 @@ const elements = {
     players: document.getElementById('players'),
     smallBlind: document.getElementById('small-blind'),
     bigBlind: document.getElementById('big-blind'),
-    suggestedBuyIn: document.getElementById('suggested-buyin'),
+    blindsUpdated: document.getElementById('blinds-updated'),
+    customizeBlindsBtn: document.getElementById('customize-blinds-btn'),
 
     // Chip inventory
     chipList: document.getElementById('chip-list'),
@@ -60,7 +62,6 @@ function init() {
 
     // Populate UI
     updateGameSettingsUI();
-    updateSuggestedBuyIn();
     renderChipList();
     renderPresetList();
 
@@ -74,6 +75,28 @@ function setupEventListeners() {
     elements.players.addEventListener('change', handleGameSettingsChange);
     elements.smallBlind.addEventListener('change', handleSmallBlindChange);
     elements.bigBlind.addEventListener('change', handleBigBlindChange);
+
+    // Customize blinds toggle - enables/disables blind input fields
+    elements.customizeBlindsBtn.addEventListener('click', () => {
+        const isDisabled = elements.smallBlind.disabled;
+        elements.smallBlind.disabled = !isDisabled;
+        elements.bigBlind.disabled = !isDisabled;
+
+        if (!isDisabled) {
+            // Switching back to auto mode
+            blindsAutoMode = true;
+            elements.customizeBlindsBtn.textContent = '⚙️ Customize Blinds';
+            // Re-calculate blinds from current buy-in
+            const suggested = suggestBlinds(parseFloat(elements.buyIn.value) || 50);
+            elements.smallBlind.value = suggested.smallBlind;
+            elements.bigBlind.value = suggested.bigBlind;
+            handleGameSettingsChange();
+        } else {
+            // Enabling manual edit
+            blindsAutoMode = false;
+            elements.customizeBlindsBtn.textContent = '✔️ Use Auto Blinds';
+        }
+    });
 
     // Calculate button
     elements.calculateBtn.addEventListener('click', handleCalculate);
@@ -108,7 +131,6 @@ function handleGameSettingsChange() {
         bigBlind: parseFloat(elements.bigBlind.value) || 1
     };
     saveGameSettings(gameSettings);
-    updateSuggestedBuyIn();
 
     // Hide results when settings change
     elements.resultsSection.classList.add('hidden');
@@ -117,16 +139,20 @@ function handleGameSettingsChange() {
 function handleBuyInChange() {
     const buyIn = parseFloat(elements.buyIn.value) || 50;
 
-    // Auto-suggest optimal blinds based on buy-in
-    const suggested = suggestBlinds(buyIn);
-    elements.smallBlind.value = suggested.smallBlind;
-    elements.bigBlind.value = suggested.bigBlind;
+    // Auto-suggest optimal blinds based on buy-in (only if in auto mode)
+    if (blindsAutoMode) {
+        const suggested = suggestBlinds(buyIn);
+        elements.smallBlind.value = suggested.smallBlind;
+        elements.bigBlind.value = suggested.bigBlind;
+    }
 
     // Update game settings with new values
     handleGameSettingsChange();
 }
 
 function handleSmallBlindChange() {
+    // User manually edited blinds - disable auto mode
+    blindsAutoMode = false;
     const sb = parseFloat(elements.smallBlind.value) || 0.50;
     // Auto-populate big blind as 2× small blind
     elements.bigBlind.value = sb * 2;
@@ -134,16 +160,15 @@ function handleSmallBlindChange() {
 }
 
 function handleBigBlindChange() {
+    // User manually edited blinds - disable auto mode
+    blindsAutoMode = false;
     const bb = parseFloat(elements.bigBlind.value) || 1;
     // Auto-populate small blind as 0.5× big blind
     elements.smallBlind.value = bb / 2;
     handleGameSettingsChange();
 }
 
-function updateSuggestedBuyIn() {
-    const suggestedValue = gameSettings.bigBlind * 100;
-    elements.suggestedBuyIn.textContent = `💡 Suggested buy-in: ${formatCurrency(suggestedValue)} (100× Big Blind)`;
-}
+
 
 // ===== Chip List =====
 function renderChipList() {
