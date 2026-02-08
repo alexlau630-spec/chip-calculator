@@ -224,6 +224,60 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             );
             if (additionalQty > 0) {
                 allocations.set(smallest.id, currentSmallest + additionalQty);
+                remaining -= additionalQty * smallest.value;
+            }
+        }
+
+        // STEP 4: SMART UPGRADE (Fix shortages by swapping)
+        // If we are still short (e.g., need $3, but smallest available is $5),
+        // try to remove smaller chips to make room for a larger one.
+        // Example: Need $3. Have $5. Overshoot by $2.
+        // Can we remove $2 worth of allocated chips? If yes, swap!
+        if (remaining > 0) {
+            // Try to find a larger chip that can fill the gap
+            for (let i = 0; i < sortedChips.length; i++) {
+                const chip = sortedChips[i];
+                const currentQty = allocations.get(chip.id);
+                const maxQty = Math.floor(chip.quantity / numPlayers);
+
+                // If we have spare of this chip and it covers the remaining amount
+                if (currentQty < maxQty && chip.value > remaining) {
+                    const overshoot = chip.value - remaining;
+
+                    // Try to satisfy 'overshoot' using smaller allocated chips
+                    // We need to find chips to REMOVE that sum to exactly 'overshoot'
+                    // Simple greedy approach to find chips to remove
+                    const toRemove = new Map();
+                    let removeRemaining = overshoot;
+
+                    for (let j = sortedChips.length - 1; j >= 0; j--) {
+                        const candidate = sortedChips[j];
+                        if (candidate.value <= removeRemaining) {
+                            const alloc = allocations.get(candidate.id);
+                            // How many can we take?
+                            const take = Math.min(alloc, Math.floor(removeRemaining / candidate.value));
+                            if (take > 0) {
+                                toRemove.set(candidate.id, take);
+                                removeRemaining -= take * candidate.value;
+                            }
+                        }
+                    }
+
+                    // If we found exact change to remove
+                    if (Math.abs(removeRemaining) < 0.01) {
+                        // Perform the swap!
+                        // 1. Add the large chip
+                        allocations.set(chip.id, currentQty + 1);
+
+                        // 2. Remove the smaller chips
+                        toRemove.forEach((qty, id) => {
+                            allocations.set(id, allocations.get(id) - qty);
+                        });
+
+                        remaining = 0; // Solved!
+                        break;
+                    }
+                }
             }
         }
 
