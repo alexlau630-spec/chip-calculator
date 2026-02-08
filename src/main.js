@@ -71,6 +71,7 @@ function init() {
 
 function setupEventListeners() {
     // Game settings inputs
+    elements.buyIn.addEventListener('input', handleBuyInFormat);
     elements.buyIn.addEventListener('change', handleBuyInChange);
     elements.players.addEventListener('change', handleGameSettingsChange);
     elements.smallBlind.addEventListener('change', handleSmallBlindChange);
@@ -117,15 +118,17 @@ function setupEventListeners() {
 
 // ===== Game Settings =====
 function updateGameSettingsUI() {
-    elements.buyIn.value = gameSettings.buyIn;
+    elements.buyIn.value = gameSettings.buyIn.toLocaleString('en-US', { maximumFractionDigits: 2 });
     elements.players.value = gameSettings.players;
     elements.smallBlind.value = gameSettings.smallBlind;
     elements.bigBlind.value = gameSettings.bigBlind;
 }
 
+const parseFormattedNumber = (val) => parseFloat(val.replace(/,/g, '')) || 0;
+
 function handleGameSettingsChange() {
     gameSettings = {
-        buyIn: parseFloat(elements.buyIn.value) || 50,
+        buyIn: parseFormattedNumber(elements.buyIn.value) || 50,
         players: parseInt(elements.players.value) || 6,
         smallBlind: parseFloat(elements.smallBlind.value) || 0.50,
         bigBlind: parseFloat(elements.bigBlind.value) || 1
@@ -136,8 +139,24 @@ function handleGameSettingsChange() {
     elements.resultsSection.classList.add('hidden');
 }
 
+function handleBuyInFormat(e) {
+    let cursor = e.target.selectionStart;
+    let val = e.target.value.replace(/,/g, '');
+    let num = parseFloat(val);
+    if (!isNaN(num)) {
+        // Format with commas, keep decimals if necessary
+        const parts = val.split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        e.target.value = parts.join('.');
+    }
+}
+
 function handleBuyInChange() {
-    const buyIn = parseFloat(elements.buyIn.value) || 50;
+    const rawValue = elements.buyIn.value;
+    const buyIn = parseFormattedNumber(rawValue) || 50;
+
+    // Re-format on blur/change just in case
+    elements.buyIn.value = buyIn.toLocaleString('en-US', { maximumFractionDigits: 2 });
 
     // Auto-suggest optimal blinds based on buy-in (only if in auto mode)
     if (blindsAutoMode) {
@@ -294,34 +313,40 @@ function handleSaveChip() {
 
 // ===== Calculate Distribution =====
 function handleCalculate() {
-    // Auto-apply optimal chip values before calculating
-    if (chips.length > 0) {
-        const suggestedValues = suggestChipValues(gameSettings.smallBlind, gameSettings.buyIn, chips.length);
-        const sortedChips = [...chips].sort((a, b) => a.value - b.value);
+    try {
+        // Auto-apply optimal chip values before calculating
+        if (chips.length > 0) {
+            // Suggest optimal chip values
+            const suggestedValues = suggestChipValues(gameSettings.smallBlind, gameSettings.buyIn, chips.length);
+            const sortedChips = [...chips].sort((a, b) => a.value - b.value);
 
-        sortedChips.forEach((chip, index) => {
-            if (index < suggestedValues.length) {
-                const originalChip = chips.find(c => c.id === chip.id);
-                if (originalChip) {
-                    originalChip.value = suggestedValues[index];
+            sortedChips.forEach((chip, index) => {
+                if (index < suggestedValues.length) {
+                    const originalChip = chips.find(c => c.id === chip.id);
+                    if (originalChip) {
+                        originalChip.value = suggestedValues[index];
+                    }
                 }
-            }
+            });
+
+            chips.sort((a, b) => a.value - b.value);
+            saveChips(chips);
+            renderChipList();
+        }
+
+        const result = calculateDistribution({
+            buyIn: gameSettings.buyIn,
+            smallBlind: gameSettings.smallBlind,
+            bigBlind: gameSettings.bigBlind,
+            numPlayers: gameSettings.players,
+            chips
         });
 
-        chips.sort((a, b) => a.value - b.value);
-        saveChips(chips);
-        renderChipList();
+        renderResults(result);
+    } catch (error) {
+        console.error("Calculation Error:", error);
+        alert(`An error occurred during calculation: ${error.message}`);
     }
-
-    const result = calculateDistribution({
-        buyIn: gameSettings.buyIn,
-        smallBlind: gameSettings.smallBlind,
-        bigBlind: gameSettings.bigBlind,
-        numPlayers: gameSettings.players,
-        chips
-    });
-
-    renderResults(result);
 }
 
 function renderResults({ distribution, totalValue, totalChips, isValid, warnings }) {

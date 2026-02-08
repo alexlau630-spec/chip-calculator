@@ -88,12 +88,12 @@ export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
     }
 
     // Remaining chips: smooth progression with max 5× jumps
-    // Pool of clean denominations
-    const cleanDenominations = [1, 2, 2.5, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+    // Pool of clean denominations - INTEGERS ONLY (decimals allowed for blinds only)
+    const integerDenominations = [1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
     const maxValue = Math.max(buyIn / 2, bigBlind * 2);
 
     // Filter to values strictly above BB and at most buy-in/2
-    const candidates = cleanDenominations.filter(d => d > bigBlind && d <= maxValue);
+    const candidates = integerDenominations.filter(d => d > bigBlind && d <= maxValue);
 
     // Pick chips with smooth progression (max 5× jump from previous)
     const slotsLeft = numChipTypes - values.length;
