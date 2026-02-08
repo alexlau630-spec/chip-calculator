@@ -1,12 +1,16 @@
 /**
  * Chip Distribution Calculator
- * Calculates optimal chip distribution for poker games
+ * Calculates optimal poker chip distributions
  */
 
 /**
- * Calculate optimal chip values based on small blind
- * Prefers integer values for easy memorization.
- * If blinds are fractional, dedicates 2 chip colors to handle them.
+ * Suggest optimal chip values based on blind structure.
+ * 
+ * RULE:
+ * - If BB >= $1 (integer blinds): Use clean base-10 denominations (1, 5, 10, 25, 100, 500)
+ *   These are easy to remember AND can add up to any blind/buy-in value.
+ * - If BB < $1 (fractional blinds): First 2 chips = SB and BB exactly,
+ *   then clean integers for the rest.
  * 
  * @param {number} smallBlind - The small blind amount
  * @param {number} numChipTypes - Number of different chip types available
@@ -14,46 +18,36 @@
  */
 export function suggestChipValues(smallBlind, numChipTypes) {
     const values = [];
-    const isIntegerBlind = smallBlind % 1 === 0;
+    const bigBlind = smallBlind * 2;
+    const isFractionalBlind = bigBlind < 1;
 
-    if (isIntegerBlind) {
-        // Integer blinds: use clean multipliers of small blind
-        // e.g., SB=1 -> 1, 2, 5, 10, 25, 100
-        const multipliers = [1, 2, 5, 10, 25, 100, 500, 1000];
-        for (let i = 0; i < Math.min(numChipTypes, multipliers.length); i++) {
-            values.push(smallBlind * multipliers[i]);
+    if (isFractionalBlind) {
+        // Fractional blinds (e.g., $0.25/$0.50): 
+        // First 2 chips MUST be SB and BB exactly (can't easily make $0.25 from other chips)
+        values.push(smallBlind);
+        if (numChipTypes >= 2) {
+            values.push(bigBlind);
+        }
+
+        // Remaining chips: use clean integer values starting from $1
+        const integerValues = [1, 5, 25, 100, 500, 1000];
+        for (let i = 2; i < numChipTypes && (i - 2) < integerValues.length; i++) {
+            values.push(integerValues[i - 2]);
         }
     } else {
-        // Fractional blinds: dedicate first 2 chips to blind values,
-        // then use integer values for the rest
-        // e.g., SB=0.25 -> 0.25, 0.50, 1, 5, 25, 100
+        // Integer blinds (e.g., $5/$10):
+        // Use clean base-10 denominations that are easy to remember
+        // These can ADD UP to any blind value (e.g., $5 = 5×$1 or 1×$5)
+        const cleanDenominations = [1, 5, 10, 25, 100, 500, 1000, 5000];
 
-        // First chip = small blind
-        values.push(smallBlind);
-
-        // Second chip = big blind (2x small blind)
-        if (numChipTypes >= 2) {
-            values.push(smallBlind * 2);
-        }
-
-        // Remaining chips: use clean integer values
-        const integerValues = [1, 5, 25, 100, 500, 1000];
-        let intIdx = 0;
-
-        // Start from an integer >= big blind
-        const bigBlind = smallBlind * 2;
-        while (intIdx < integerValues.length && integerValues[intIdx] <= bigBlind) {
-            intIdx++;
-        }
-
-        for (let i = 2; i < numChipTypes && intIdx < integerValues.length; i++) {
-            values.push(integerValues[intIdx]);
-            intIdx++;
+        for (let i = 0; i < Math.min(numChipTypes, cleanDenominations.length); i++) {
+            values.push(cleanDenominations[i]);
         }
     }
 
     return values;
 }
+
 
 /**
  * Calculate optimal chip distribution for each player
