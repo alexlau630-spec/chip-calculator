@@ -18,7 +18,7 @@ export function suggestBlinds(buyIn) {
         [0.25, 0.50],
         [0.50, 1],
         [1, 2],
-        [2, 5],    // Common exception
+        [2.5, 5],
         [5, 10],
         [10, 20],
         [25, 50],
@@ -77,23 +77,36 @@ export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
         values.push(bigBlind);
     }
 
-    // Remaining chips: pick from clean denominations above BB
-    const cleanDenominations = [1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+    // Remaining chips: smooth progression with max 5× jumps
+    // Pool of clean denominations
+    const cleanDenominations = [1, 2, 2.5, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
     const maxValue = Math.max(buyIn / 2, bigBlind * 2);
 
     // Filter to values strictly above BB and at most buy-in/2
-    const remaining = cleanDenominations.filter(d => d > bigBlind && d <= maxValue);
+    const candidates = cleanDenominations.filter(d => d > bigBlind && d <= maxValue);
 
-    // Pick evenly spaced values to fill remaining chip slots
+    // Pick chips with smooth progression (max 5× jump from previous)
     const slotsLeft = numChipTypes - values.length;
-    if (slotsLeft > 0 && remaining.length > 0) {
-        if (remaining.length <= slotsLeft) {
-            values.push(...remaining);
+    if (slotsLeft > 0 && candidates.length > 0) {
+        let lastValue = bigBlind;
+        let picked = [];
+
+        for (const denom of candidates) {
+            // Only pick if jump from last is reasonable (max 5×)
+            if (denom <= lastValue * 5) {
+                picked.push(denom);
+                lastValue = denom;
+            }
+        }
+
+        // If we have more candidates than slots, pick evenly spaced from the smooth set
+        if (picked.length <= slotsLeft) {
+            values.push(...picked);
         } else {
-            const step = (remaining.length - 1) / (slotsLeft - 1);
+            const step = (picked.length - 1) / (slotsLeft - 1);
             for (let i = 0; i < slotsLeft; i++) {
                 const idx = Math.round(i * step);
-                values.push(remaining[idx]);
+                values.push(picked[idx]);
             }
         }
     }
@@ -238,14 +251,23 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
                 allocations.set(chip.id, qty);
             }
 
-            // Still over? Remove more aggressively
+            // Still over? Remove more aggressively, BUT only if it doesn't create a LARGER gap
             for (let i = n - 1; i >= 1 && totalValue > buyIn; i--) {
                 const chip = sortedChips[i];
                 let qty = allocations.get(chip.id);
 
                 while (qty > 0 && totalValue > buyIn) {
-                    qty--;
-                    totalValue -= chip.value;
+                    const overshoot = totalValue - buyIn;
+                    const undershootIfRemoved = chip.value - overshoot;
+
+                    // Only remove if it doesn't create a bigger gap
+                    if (undershootIfRemoved <= overshoot) {
+                        qty--;
+                        totalValue -= chip.value;
+                    } else {
+                        // Removing this chip would make things worse, stop
+                        break;
+                    }
                 }
                 allocations.set(chip.id, qty);
             }
