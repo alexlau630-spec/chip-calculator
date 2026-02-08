@@ -283,8 +283,8 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             }
         }
 
-        // STEP 6: Fine-tune to hit EXACT buy-in
-        const currentTotal = sortedChips.reduce((sum, c) => sum + allocations.get(c.id) * c.value, 0);
+        // STEP 6: Fine-tune to hit EXACT buy-in (try smallest first)
+        let currentTotal = sortedChips.reduce((sum, c) => sum + allocations.get(c.id) * c.value, 0);
         if (currentTotal < buyIn) {
             const gap = buyIn - currentTotal;
             const currentSmallest = allocations.get(smallest.id);
@@ -294,6 +294,45 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             );
             if (additionalQty > 0) {
                 allocations.set(smallest.id, currentSmallest + additionalQty);
+                currentTotal += additionalQty * smallest.value;
+            }
+        }
+
+        // STEP 7: If still short, try adding ANY chip from LARGEST to SMALLEST
+        // This handles cases where smallest chips are exhausted or can't fill the gap
+        if (currentTotal < buyIn) {
+            for (let i = n - 1; i >= 0 && currentTotal < buyIn; i--) {
+                const chip = sortedChips[i];
+                const maxQty = Math.floor(chip.quantity / numPlayers);
+                const currentQty = allocations.get(chip.id);
+                const available = maxQty - currentQty;
+
+                if (available > 0 && chip.value <= (buyIn - currentTotal)) {
+                    const canAdd = Math.floor((buyIn - currentTotal) / chip.value);
+                    const toAdd = Math.min(canAdd, available);
+                    if (toAdd > 0) {
+                        allocations.set(chip.id, currentQty + toAdd);
+                        currentTotal += toAdd * chip.value;
+                    }
+                }
+            }
+        }
+
+        // STEP 8: Final cleanup - add 1 more of any chip that fits the remaining gap
+        if (currentTotal < buyIn) {
+            for (let i = n - 1; i >= 0; i--) {
+                const chip = sortedChips[i];
+                const maxQty = Math.floor(chip.quantity / numPlayers);
+                const currentQty = allocations.get(chip.id);
+                const gap = buyIn - currentTotal;
+
+                if (currentQty < maxQty && chip.value <= gap) {
+                    allocations.set(chip.id, currentQty + 1);
+                    currentTotal += chip.value;
+                    i = n; // restart from largest to fill more
+                }
+
+                if (currentTotal >= buyIn) break;
             }
         }
 
