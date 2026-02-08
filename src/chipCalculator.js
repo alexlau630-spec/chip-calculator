@@ -136,77 +136,63 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             distribution.push({ ...large, quantity: largeQty, subtotal: largeQty * large.value });
         }
     } else {
-        // Three or more chip types: USE ALL COLORS
-        // Goal: Distribute value across all chip types, ensuring each color is represented
-        // CRITICAL: Always allocate smallest chips FIRST for blind payments
+        // Three or more chip types: USE ALL COLORS and FILL BUY-IN
+        // 
+        // Strategy (smallest-to-largest allocation, largest-down fill):
+        // 1. Allocate smallest chips first (10 min for blind payments)
+        // 2. Allocate 2 of each middle chip (for color variety)
+        // 3. Fill remaining value from LARGEST down (efficiently hit buy-in)
+        // 4. Fine-tune with smallest chips
 
         const allocations = new Map();
-
-        // Initialize all chips with 0
         sortedChips.forEach(chip => allocations.set(chip.id, 0));
 
-        // FIRST: Allocate smallest chips (for blind payments)
-        // Give at least 10-20 of the smallest denomination
         const smallest = sortedChips[0];
         const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
-        const smallestTargetQty = Math.min(20, smallestMaxQty, Math.floor(remainingValue / smallest.value));
-        allocations.set(smallest.id, smallestTargetQty);
-        remainingValue -= smallestTargetQty * smallest.value;
 
-        // SECOND: Allocate second-smallest chips
-        if (sortedChips.length >= 2 && remainingValue > 0) {
-            const secondSmallest = sortedChips[1];
-            const secondMaxQty = Math.floor(secondSmallest.quantity / numPlayers);
-            const secondTargetQty = Math.min(10, secondMaxQty, Math.floor(remainingValue / secondSmallest.value));
-            if (secondTargetQty > 0) {
-                allocations.set(secondSmallest.id, secondTargetQty);
-                remainingValue -= secondTargetQty * secondSmallest.value;
-            }
-        }
+        // STEP 1: Allocate smallest chips for blind payments (10 minimum)
+        const smallestInitial = Math.min(10, smallestMaxQty, Math.floor(remainingValue / smallest.value));
+        allocations.set(smallest.id, smallestInitial);
+        remainingValue -= smallestInitial * smallest.value;
 
-        // THIRD: Allocate to larger chips (from largest down)
-        // Give each a minimum of 2-4 chips to ensure all colors are used
-        for (let i = sortedChips.length - 1; i >= 2 && remainingValue > 0; i--) {
+        // STEP 2: Allocate 2 of each MIDDLE chip (not smallest, not largest)
+        // This ensures color variety while leaving room for largest to fill value
+        for (let i = 1; i < sortedChips.length - 1 && remainingValue > 0; i++) {
             const chip = sortedChips[i];
             const maxQty = Math.floor(chip.quantity / numPlayers);
-            const maxFromValue = Math.floor(remainingValue / chip.value);
-
-            // Target: 2-4 chips per color
-            const targetQty = (i === sortedChips.length - 1) ? 2 : 4;
-            const qty = Math.min(targetQty, maxQty, maxFromValue);
-
-            if (qty > 0) {
-                allocations.set(chip.id, qty);
-                remainingValue -= qty * chip.value;
+            const allocQty = Math.min(2, maxQty, Math.floor(remainingValue / chip.value));
+            if (allocQty > 0) {
+                allocations.set(chip.id, allocQty);
+                remainingValue -= allocQty * chip.value;
             }
         }
 
-        // FOURTH: If any value remains, add more smallest chips
+        // STEP 3: Fill remaining value from LARGEST down
+        // This efficiently fills up to the buy-in target
+        for (let i = sortedChips.length - 1; i >= 0 && remainingValue > 0; i--) {
+            const chip = sortedChips[i];
+            const currentQty = allocations.get(chip.id);
+            const maxQty = Math.floor(chip.quantity / numPlayers);
+            const availableQty = maxQty - currentQty;
+            const canFit = Math.floor(remainingValue / chip.value);
+
+            const addQty = Math.min(availableQty, canFit);
+            if (addQty > 0) {
+                allocations.set(chip.id, currentQty + addQty);
+                remainingValue -= addQty * chip.value;
+            }
+        }
+
+        // STEP 4: Fine-tune with smallest chips to hit exact amount
         if (remainingValue > 0) {
             const currentSmallest = allocations.get(smallest.id);
             const additionalQty = Math.min(
-                Math.round(remainingValue / smallest.value),
+                Math.ceil(remainingValue / smallest.value),
                 smallestMaxQty - currentSmallest
             );
             if (additionalQty > 0) {
                 allocations.set(smallest.id, currentSmallest + additionalQty);
                 remainingValue -= additionalQty * smallest.value;
-            }
-        }
-
-        // FIFTH: Ensure all colors have at least 2 chips (swap from smallest if needed)
-        for (let i = 2; i < sortedChips.length; i++) {
-            const chip = sortedChips[i];
-            if (allocations.get(chip.id) === 0) {
-                const smallestQty = allocations.get(smallest.id);
-                const swapQty = 2;
-                const valueNeeded = swapQty * chip.value;
-                const smallChipsToRemove = Math.ceil(valueNeeded / smallest.value);
-
-                if (smallestQty >= smallChipsToRemove + 8) { // Keep at least 8 smallest
-                    allocations.set(chip.id, swapQty);
-                    allocations.set(smallest.id, smallestQty - smallChipsToRemove);
-                }
             }
         }
 
