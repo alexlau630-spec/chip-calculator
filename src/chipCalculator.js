@@ -180,19 +180,20 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
         const smallest = sortedChips[0];
         const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
 
-        // STEP 1: Reserve minimum 2 chips per color (smallest gets more for blinds)
+        // STEP 1: Reserve minimum chips per color (ensures playable stack size)
         let reservedValue = 0;
 
-        // Smallest: reserve 8 for blind payments
-        const smallestReserve = Math.min(8, smallestMaxQty);
+        // Smallest: reserve 20 for blind payments and change
+        const smallestReserve = Math.min(20, smallestMaxQty);
         allocations.set(smallest.id, smallestReserve);
         reservedValue += smallestReserve * smallest.value;
 
-        // Others: reserve 2 each
-        for (let i = 1; i < sortedChips.length; i++) {
+        // Others (except largest): reserve 10 each for variety/mid-game play
+        // Largest doesn't need reserve as it fills the value gap
+        for (let i = 1; i < sortedChips.length - 1; i++) {
             const chip = sortedChips[i];
             const maxQty = Math.floor(chip.quantity / numPlayers);
-            const reserveQty = Math.min(2, maxQty);
+            const reserveQty = Math.min(10, maxQty);
             allocations.set(chip.id, reserveQty);
             reservedValue += reserveQty * chip.value;
         }

@@ -112,6 +112,11 @@ function handleGameSettingsChange() {
     saveGameSettings(gameSettings);
     updateSuggestedBuyIn();
 
+    // Auto-suggest optimal chip values if chips exist
+    if (chips.length > 0) {
+        handleSuggestValues();
+    }
+
     // Hide results when settings change
     elements.resultsSection.classList.add('hidden');
 }
