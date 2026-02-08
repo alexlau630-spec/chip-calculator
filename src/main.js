@@ -1,4 +1,4 @@
-import { calculateDistribution, suggestChipValues, formatCurrency } from './chipCalculator.js';
+import { calculateDistribution, suggestChipValues, suggestBlinds, formatCurrency } from './chipCalculator.js';
 import {
     saveChips, loadChips, saveGameSettings, loadGameSettings,
     getPresets, savePreset, deletePreset, loadPreset,
@@ -70,7 +70,7 @@ function init() {
 
 function setupEventListeners() {
     // Game settings inputs
-    elements.buyIn.addEventListener('change', handleGameSettingsChange);
+    elements.buyIn.addEventListener('change', handleBuyInChange);
     elements.players.addEventListener('change', handleGameSettingsChange);
     elements.smallBlind.addEventListener('change', handleSmallBlindChange);
     elements.bigBlind.addEventListener('change', handleBigBlindChange);
@@ -112,6 +112,18 @@ function handleGameSettingsChange() {
 
     // Hide results when settings change
     elements.resultsSection.classList.add('hidden');
+}
+
+function handleBuyInChange() {
+    const buyIn = parseFloat(elements.buyIn.value) || 50;
+
+    // Auto-suggest optimal blinds based on buy-in
+    const suggested = suggestBlinds(buyIn);
+    elements.smallBlind.value = suggested.smallBlind;
+    elements.bigBlind.value = suggested.bigBlind;
+
+    // Update game settings with new values
+    handleGameSettingsChange();
 }
 
 function handleSmallBlindChange() {

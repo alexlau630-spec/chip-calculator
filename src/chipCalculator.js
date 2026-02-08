@@ -4,13 +4,61 @@
  */
 
 /**
+ * Suggest optimal blinds based on buy-in amount.
+ * Uses the "100 Big Blind" standard and only suggests clean values.
+ * 
+ * @param {number} buyIn - The buy-in amount
+ * @returns {{smallBlind: number, bigBlind: number}} - Suggested blind values
+ */
+export function suggestBlinds(buyIn) {
+    // Standard clean blind levels (SB, BB pairs)
+    const blindLevels = [
+        [0.05, 0.10],
+        [0.10, 0.20],
+        [0.25, 0.50],
+        [0.50, 1],
+        [1, 2],
+        [2, 5],    // Common exception
+        [5, 10],
+        [10, 20],
+        [25, 50],
+        [50, 100],
+        [100, 200],
+        [250, 500],
+        [500, 1000]
+    ];
+
+    // Target: 100 big blinds (acceptable range: 50-200 BB)
+    const targetBB = buyIn / 100;
+
+    // Find the closest clean blind level
+    let bestLevel = blindLevels[0];
+    let bestDiff = Infinity;
+
+    for (const [sb, bb] of blindLevels) {
+        const diff = Math.abs(bb - targetBB);
+        const bbCount = buyIn / bb;
+
+        // Prefer levels that give 50-200 BBs
+        if (bbCount >= 40 && bbCount <= 250 && diff < bestDiff) {
+            bestLevel = [sb, bb];
+            bestDiff = diff;
+        }
+    }
+
+    return {
+        smallBlind: bestLevel[0],
+        bigBlind: bestLevel[1]
+    };
+}
+
+/**
  * Suggest optimal chip values based on buy-in AND blind structure.
  * 
- * PRIORITIES:
- * 1. Values should allow hitting the exact buy-in
- * 2. Values should be easy to remember (clean integers)
- * 3. Smallest chip should be able to pay the small blind
- * 4. Largest chip should be reasonable (≤ buy-in / 2)
+ * RULES:
+ * 1. Smallest chip = Small Blind (always)
+ * 2. Second chip = Big Blind (always)
+ * 3. Remaining chips scale up to buy-in / 2
  * 
  * @param {number} smallBlind - The small blind amount
  * @param {number} buyIn - The buy-in amount
@@ -21,52 +69,31 @@ export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
     const values = [];
     const bigBlind = smallBlind * 2;
 
-    // Fractional if EITHER blind is less than $1 (needs exact chip representation)
-    const isFractionalBlind = smallBlind < 1 || bigBlind < 1;
+    // Chip 1: Small Blind (always)
+    values.push(smallBlind);
 
-    // Denomination pool (from smallest to largest)
-    const allDenominations = [0.25, 0.50, 1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+    // Chip 2: Big Blind (always, if we have 2+ colors)
+    if (numChipTypes >= 2) {
+        values.push(bigBlind);
+    }
 
-    if (isFractionalBlind) {
-        // Fractional blinds: First 2 chips MUST be SB and BB exactly
-        values.push(smallBlind);
-        if (numChipTypes >= 2) {
-            values.push(bigBlind);
-        }
+    // Remaining chips: pick from clean denominations above BB
+    const cleanDenominations = [1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+    const maxValue = Math.max(buyIn / 2, bigBlind * 2);
 
-        // Remaining chips: pick from pool, starting above BB, up to buy-in/2
-        const maxValue = Math.max(buyIn / 2, 1);
-        const remaining = allDenominations.filter(d => d > bigBlind && d <= maxValue);
+    // Filter to values strictly above BB and at most buy-in/2
+    const remaining = cleanDenominations.filter(d => d > bigBlind && d <= maxValue);
 
-        for (let i = 2; i < numChipTypes && (i - 2) < remaining.length; i++) {
-            values.push(remaining[i - 2]);
-        }
-    } else {
-        // Integer blinds: Pick from pool based on buy-in range
-        // Smallest should be ≤ small blind (or 1 if SB > 1)
-        // Largest should be ≤ buy-in / 2
-
-        const minValue = Math.min(smallBlind, 1); // At least $1 or smaller
-        const maxValue = Math.max(buyIn / 2, smallBlind * 2);
-
-        // Filter denominations to valid range
-        let validDenoms = allDenominations.filter(d => d >= minValue && d <= maxValue && d % 1 === 0);
-
-        // Ensure we have at least SB and BB representable
-        if (validDenoms.length === 0) {
-            validDenoms = [1, 5, 10, 25, 100]; // fallback
-        }
-
-        // Pick evenly spaced denominations to use all colors
-        if (validDenoms.length <= numChipTypes) {
-            // Use all valid denominations
-            values.push(...validDenoms);
+    // Pick evenly spaced values to fill remaining chip slots
+    const slotsLeft = numChipTypes - values.length;
+    if (slotsLeft > 0 && remaining.length > 0) {
+        if (remaining.length <= slotsLeft) {
+            values.push(...remaining);
         } else {
-            // Pick evenly spaced values
-            const step = (validDenoms.length - 1) / (numChipTypes - 1);
-            for (let i = 0; i < numChipTypes; i++) {
+            const step = (remaining.length - 1) / (slotsLeft - 1);
+            for (let i = 0; i < slotsLeft; i++) {
                 const idx = Math.round(i * step);
-                values.push(validDenoms[idx]);
+                values.push(remaining[idx]);
             }
         }
     }
