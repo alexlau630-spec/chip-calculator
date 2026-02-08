@@ -164,124 +164,113 @@ export function calculateDistribution({ buyIn, smallBlind, bigBlind, numPlayers,
             distribution.push({ ...large, quantity: largeQty, subtotal: largeQty * large.value });
         }
     } else {
-        // Three or more chip types: GREEDY FILL
+        // Three or more chip types: SMART PYRAMID ALGORITHM
         // 
-        // Priority 1: Hit the exact buy-in value
-        // Priority 2: Use all colors (minimum 2 per color)
-        // 
-        // Strategy:
-        // 1. Reserve minimum 2 chips per color (ensures variety)
-        // 2. Fill remaining value from largest to smallest
-        // 3. Top off with smallest to hit exact buy-in
+        // Goals:
+        // 1. Hit buy-in value exactly (or as close as possible)
+        // 2. Pyramid structure: smallest chips = most quantity
+        // 3. Use all colors if possible
+        // 4. Reasonable total chip count (30-50)
 
         const allocations = new Map();
         sortedChips.forEach(chip => allocations.set(chip.id, 0));
 
+        const n = sortedChips.length;
         const smallest = sortedChips[0];
         const smallestMaxQty = Math.floor(smallest.quantity / numPlayers);
 
-        // STEP 1: Reserve minimum chips per color (ensures playable stack size)
-        let reservedValue = 0;
+        // STEP 1: Define pyramid target quantities (decreasing)
+        const baseTargets = [25, 15, 10, 6, 4, 3, 2, 2, 2, 2];
+        const targets = baseTargets.slice(0, n);
 
-        // Smallest: reserve 20 for blind payments and change
-        const smallestReserve = Math.min(20, smallestMaxQty);
-        allocations.set(smallest.id, smallestReserve);
-        reservedValue += smallestReserve * smallest.value;
-
-        // Others (except largest): reserve 10 each for variety/mid-game play
-        // Largest doesn't need reserve as it fills the value gap
-        for (let i = 1; i < sortedChips.length - 1; i++) {
+        // STEP 2: Calculate initial allocation and total value
+        let totalValue = 0;
+        for (let i = 0; i < n; i++) {
             const chip = sortedChips[i];
             const maxQty = Math.floor(chip.quantity / numPlayers);
-            const reserveQty = Math.min(10, maxQty);
-            allocations.set(chip.id, reserveQty);
-            reservedValue += reserveQty * chip.value;
+            const qty = Math.min(targets[i], maxQty);
+            allocations.set(chip.id, qty);
+            totalValue += qty * chip.value;
         }
 
-        // STEP 2: Fill remaining from LARGEST down
-        let remaining = buyIn - reservedValue;
+        // STEP 3: Adjust to hit buy-in
+        if (totalValue > buyIn) {
+            // OVER: Reduce from LARGEST chips first
+            for (let i = n - 1; i >= 0 && totalValue > buyIn; i--) {
+                const chip = sortedChips[i];
+                let qty = allocations.get(chip.id);
 
-        for (let i = sortedChips.length - 1; i >= 0 && remaining > 0; i--) {
-            const chip = sortedChips[i];
-            const currentQty = allocations.get(chip.id);
-            const maxQty = Math.floor(chip.quantity / numPlayers);
-            const available = maxQty - currentQty;
-            const canFit = Math.floor(remaining / chip.value);
+                while (qty > 0 && totalValue > buyIn) {
+                    if (totalValue - chip.value >= buyIn) {
+                        qty--;
+                        totalValue -= chip.value;
+                    } else {
+                        break;
+                    }
+                }
+                allocations.set(chip.id, qty);
+            }
 
-            const addQty = Math.min(available, canFit);
-            if (addQty > 0) {
-                allocations.set(chip.id, currentQty + addQty);
-                remaining -= addQty * chip.value;
+            // Still over? Remove more aggressively
+            for (let i = n - 1; i >= 1 && totalValue > buyIn; i--) {
+                const chip = sortedChips[i];
+                let qty = allocations.get(chip.id);
+
+                while (qty > 0 && totalValue > buyIn) {
+                    qty--;
+                    totalValue -= chip.value;
+                }
+                allocations.set(chip.id, qty);
             }
         }
 
-        // STEP 3: Top off with smallest to hit exact buy-in
-        if (remaining > 0) {
+        // STEP 4: Fill remaining gap with SMALLEST chips
+        if (totalValue < buyIn) {
+            const gap = buyIn - totalValue;
             const currentSmallest = allocations.get(smallest.id);
             const additionalQty = Math.min(
-                Math.ceil(remaining / smallest.value),
+                Math.ceil(gap / smallest.value),
                 smallestMaxQty - currentSmallest
             );
-            if (additionalQty > 0) {
-                allocations.set(smallest.id, currentSmallest + additionalQty);
-                remaining -= additionalQty * smallest.value;
-            }
+            allocations.set(smallest.id, currentSmallest + additionalQty);
+            totalValue += additionalQty * smallest.value;
         }
 
-        // STEP 4: SMART UPGRADE (Fix shortages by swapping)
-        // If we are still short (e.g., need $3, but smallest available is $5),
-        // try to remove smaller chips to make room for a larger one.
-        // Example: Need $3. Have $5. Overshoot by $2.
-        // Can we remove $2 worth of allocated chips? If yes, swap!
-        if (remaining > 0) {
-            // Try to find a larger chip that can fill the gap
-            for (let i = 0; i < sortedChips.length; i++) {
-                const chip = sortedChips[i];
-                const currentQty = allocations.get(chip.id);
+        // STEP 5: Ensure all colors have at least 2 chips
+        for (let i = 1; i < n; i++) {
+            const chip = sortedChips[i];
+            const currentQty = allocations.get(chip.id);
+
+            if (currentQty === 0) {
                 const maxQty = Math.floor(chip.quantity / numPlayers);
+                if (maxQty >= 2) {
+                    const valueToAdd = 2 * chip.value;
+                    const smallestQty = allocations.get(smallest.id);
+                    const toRemove = Math.ceil(valueToAdd / smallest.value);
 
-                // If we have spare of this chip and it covers the remaining amount
-                if (currentQty < maxQty && chip.value > remaining) {
-                    const overshoot = chip.value - remaining;
-
-                    // Try to satisfy 'overshoot' using smaller allocated chips
-                    // We need to find chips to REMOVE that sum to exactly 'overshoot'
-                    // Simple greedy approach to find chips to remove
-                    const toRemove = new Map();
-                    let removeRemaining = overshoot;
-
-                    for (let j = sortedChips.length - 1; j >= 0; j--) {
-                        const candidate = sortedChips[j];
-                        if (candidate.value <= removeRemaining) {
-                            const alloc = allocations.get(candidate.id);
-                            // How many can we take?
-                            const take = Math.min(alloc, Math.floor(removeRemaining / candidate.value));
-                            if (take > 0) {
-                                toRemove.set(candidate.id, take);
-                                removeRemaining -= take * candidate.value;
-                            }
-                        }
-                    }
-
-                    // If we found exact change to remove
-                    if (Math.abs(removeRemaining) < 0.01) {
-                        // Perform the swap!
-                        // 1. Add the large chip
-                        allocations.set(chip.id, currentQty + 1);
-
-                        // 2. Remove the smaller chips
-                        toRemove.forEach((qty, id) => {
-                            allocations.set(id, allocations.get(id) - qty);
-                        });
-
-                        remaining = 0; // Solved!
-                        break;
+                    if (smallestQty >= toRemove + 10) {
+                        allocations.set(chip.id, 2);
+                        allocations.set(smallest.id, smallestQty - toRemove);
                     }
                 }
             }
         }
 
-        // Build distribution from allocations (sorted by value)
+        // STEP 6: Fine-tune to hit EXACT buy-in
+        const currentTotal = sortedChips.reduce((sum, c) => sum + allocations.get(c.id) * c.value, 0);
+        if (currentTotal < buyIn) {
+            const gap = buyIn - currentTotal;
+            const currentSmallest = allocations.get(smallest.id);
+            const additionalQty = Math.min(
+                Math.ceil(gap / smallest.value),
+                smallestMaxQty - currentSmallest
+            );
+            if (additionalQty > 0) {
+                allocations.set(smallest.id, currentSmallest + additionalQty);
+            }
+        }
+
+        // Build distribution from allocations
         sortedChips.forEach(chip => {
             const qty = allocations.get(chip.id);
             if (qty > 0) {

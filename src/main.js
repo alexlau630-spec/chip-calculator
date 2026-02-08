@@ -22,7 +22,6 @@ const elements = {
     // Chip inventory
     chipList: document.getElementById('chip-list'),
     addChipBtn: document.getElementById('add-chip-btn'),
-    suggestValuesBtn: document.getElementById('suggest-values-btn'),
 
     // Calculate
     calculateBtn: document.getElementById('calculate-btn'),
@@ -81,7 +80,6 @@ function setupEventListeners() {
 
     // Chip inventory
     elements.addChipBtn.addEventListener('click', openAddChipModal);
-    elements.suggestValuesBtn.addEventListener('click', handleSuggestValues);
 
     // Modal
     elements.cancelAddChip.addEventListener('click', closeAddChipModal);
@@ -111,11 +109,6 @@ function handleGameSettingsChange() {
     };
     saveGameSettings(gameSettings);
     updateSuggestedBuyIn();
-
-    // Auto-suggest optimal chip values if chips exist
-    if (chips.length > 0) {
-        handleSuggestValues();
-    }
 
     // Hide results when settings change
     elements.resultsSection.classList.add('hidden');
@@ -262,40 +255,27 @@ function handleSaveChip() {
     elements.resultsSection.classList.add('hidden');
 }
 
-// ===== Suggest Values =====
-function handleSuggestValues() {
-    const smallBlind = parseFloat(elements.smallBlind.value) || 0.50;
-    const buyIn = parseFloat(elements.buyIn.value) || 50;
-    const suggestedValues = suggestChipValues(smallBlind, buyIn, chips.length);
-
-    // Apply suggested values to chips (sorted by current value)
-    const sortedChips = [...chips].sort((a, b) => a.value - b.value);
-
-    sortedChips.forEach((chip, index) => {
-        if (index < suggestedValues.length) {
-            const originalChip = chips.find(c => c.id === chip.id);
-            if (originalChip) {
-                originalChip.value = suggestedValues[index];
-            }
-        }
-    });
-
-    // Re-sort by new values
-    chips.sort((a, b) => a.value - b.value);
-
-    saveChips(chips);
-    renderChipList();
-    elements.resultsSection.classList.add('hidden');
-
-    // Visual feedback
-    elements.suggestValuesBtn.textContent = '✓ Values Updated';
-    setTimeout(() => {
-        elements.suggestValuesBtn.textContent = '✨ Suggest Optimal Values';
-    }, 1500);
-}
-
 // ===== Calculate Distribution =====
 function handleCalculate() {
+    // Auto-apply optimal chip values before calculating
+    if (chips.length > 0) {
+        const suggestedValues = suggestChipValues(gameSettings.smallBlind, gameSettings.buyIn, chips.length);
+        const sortedChips = [...chips].sort((a, b) => a.value - b.value);
+
+        sortedChips.forEach((chip, index) => {
+            if (index < suggestedValues.length) {
+                const originalChip = chips.find(c => c.id === chip.id);
+                if (originalChip) {
+                    originalChip.value = suggestedValues[index];
+                }
+            }
+        });
+
+        chips.sort((a, b) => a.value - b.value);
+        saveChips(chips);
+        renderChipList();
+    }
+
     const result = calculateDistribution({
         buyIn: gameSettings.buyIn,
         smallBlind: gameSettings.smallBlind,
