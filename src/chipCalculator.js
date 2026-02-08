@@ -36,7 +36,7 @@ export function suggestChipValues(smallBlind, buyIn, numChipTypes) {
 
         // Remaining chips: pick from pool, starting above BB, up to buy-in/2
         const maxValue = Math.max(buyIn / 2, 1);
-        const remaining = allDenominations.filter(d => d >= 1 && d <= maxValue);
+        const remaining = allDenominations.filter(d => d > bigBlind && d <= maxValue);
 
         for (let i = 2; i < numChipTypes && (i - 2) < remaining.length; i++) {
             values.push(remaining[i - 2]);
